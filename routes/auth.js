@@ -1,0 +1,185 @@
+const express = require('express');
+const router = express.Router();
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
+
+// Fixed admin credentials - CHANGE THESE!
+const ADMIN_EMAIL = 'admin@everlink.com';
+const ADMIN_PASSWORD = 'admin123456'; // Change this to something secure!
+
+// Generate JWT Token
+const generateToken = (userId) => {
+  return jwt.sign(
+    { userId }, 
+    process.env.JWT_SECRET || '7883b3e8a303917ebea477a919d0faf718d92ef703e0fc60772ade8a4f136407efc2a634447a3212ac78d81f5c469eb6f028673d809f7cc9adfec02c2b48746e',
+    { expiresIn: '30d' }
+  );
+};
+
+// Register Route (Only for regular users)
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Validate input
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields'
+      });
+    }
+
+    // Check if admin email is being used
+    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email is reserved'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already registered'
+      });
+    }
+
+    // Password length check
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
+    // Create new user (role will be 'user' by default)
+    const user = new User({
+      name,
+      email: email.toLowerCase(),
+      password,
+      role: 'user'
+    });
+
+    await user.save();
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during registration'
+    });
+  }
+});
+
+// Login Route (For both admin and users)
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email and password'
+      });
+    }
+
+    // Check if it's the admin logging in
+    if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      if (password === ADMIN_PASSWORD) {
+        // Find or create admin user
+        let admin = await User.findOne({ email: ADMIN_EMAIL.toLowerCase() });
+        
+        if (!admin) {
+          admin = new User({
+            name: 'Admin',
+            email: ADMIN_EMAIL.toLowerCase(),
+            password: ADMIN_PASSWORD,
+            role: 'admin'
+          });
+          await admin.save();
+        }
+
+        const token = generateToken(admin._id);
+
+        return res.status(200).json({
+          success: true,
+          message: 'Login successful',
+          token,
+          user: {
+            id: admin._id,
+            name: admin.name,
+            email: admin.email,
+            role: admin.role
+          }
+        });
+      } else {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid credentials'
+        });
+      }
+    }
+
+    // Regular user login
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    // Check password
+    const isPasswordValid = await user.comparePassword(password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    // Generate token
+    const token = generateToken(user._id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login'
+    });
+  }
+});
+
+module.exports = router;
