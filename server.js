@@ -40,6 +40,9 @@ app.get("/", (req, res) => {
 // Auth Routes
 app.use('/api/auth', require('./routes/auth'));
 
+// Admin Routes - ADD THIS LINE
+app.use('/api/admin', require('./routes/admin'));
+
 // --- Socket.io Events ---
 io.on("connection", (socket) => {
   console.log("👤 User connected:", socket.id);
