@@ -19,10 +19,13 @@ const generateToken = (userId) => {
 // ===================== REGISTER =====================
 router.post('/register', async (req, res) => {
   try {
+    console.log('📝 Register attempt:', { email: req.body.email, name: req.body.name });
+    
     const { name, email, password } = req.body;
 
     // Validate input
     if (!name || !email || !password) {
+      console.log('❌ Missing fields');
       return res.status(400).json({
         success: false,
         message: 'Please provide all required fields'
@@ -31,6 +34,7 @@ router.post('/register', async (req, res) => {
 
     // Check if admin email is being used
     if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      console.log('❌ Reserved email attempted');
       return res.status(400).json({
         success: false,
         message: 'This email is reserved'
@@ -40,6 +44,7 @@ router.post('/register', async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
+      console.log('❌ Email already exists');
       return res.status(400).json({
         success: false,
         message: 'Email already registered'
@@ -48,6 +53,7 @@ router.post('/register', async (req, res) => {
 
     // Password length check
     if (password.length < 6) {
+      console.log('❌ Password too short');
       return res.status(400).json({
         success: false,
         message: 'Password must be at least 6 characters'
@@ -64,6 +70,7 @@ router.post('/register', async (req, res) => {
     });
 
     await user.save();
+    console.log('✅ User created:', user.email);
 
     // Generate token
     const token = generateToken(user._id);
@@ -82,10 +89,26 @@ router.post('/register', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Register error:', error);
+    console.error('❌ Register error:', error);
+    
+    // Handle specific mongoose errors
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error: ' + Object.values(error.errors).map(e => e.message).join(', ')
+      });
+    }
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email already exists'
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Server error during registration'
+      message: 'Server error during registration: ' + error.message
     });
   }
 });
