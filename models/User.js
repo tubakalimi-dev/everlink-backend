@@ -24,20 +24,20 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
-  status: {  // ADD THIS
+  status: {
     type: String,
     enum: ['online', 'offline', 'away', 'busy'],
     default: 'offline'
   },
-  lastSeen: {  // ADD THIS
+  lastSeen: {
     type: Date,
     default: Date.now
   },
-  bio: {  // ADD THIS (optional)
+  bio: {
     type: String,
     default: ''
   },
-  profilePicture: {  // ADD THIS (optional)
+  profilePicture: {
     type: String,
     default: ''
   },
