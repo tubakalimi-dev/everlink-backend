@@ -13,8 +13,8 @@ const server = http.createServer(app);
 
 // Socket.io setup
 const io = new Server(server, {
-  cors: {
-    origin: "*",
+  cors: 
+ {   origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -64,6 +64,7 @@ app.get("/", (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/messages', require('./routes/messages'));
+app.use('/api/status', require('./routes/status'));
 
 // Socket.io - Store connected users
 const connectedUsers = new Map();
