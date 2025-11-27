@@ -57,14 +57,26 @@ router.post("/upload-base64", auth, async (req, res) => {
       return res.status(400).json({ error: "No data provided" });
     }
 
+    // ✅ FIX: Format base64 data correctly for Cloudinary
+    const base64String = base64Data.includes('base64,') 
+      ? base64Data.split('base64,')[1]  // Remove data URL prefix if present
+      : base64Data;
+
+    // Construct proper data URI
+    const dataURI = `data:${mediaType};base64,${base64String}`;
+    
+    console.log("📤 Uploading to Cloudinary...");
+    console.log("Media type:", mediaType);
+    console.log("Base64 length:", base64String.length);
+
     // Upload base64 to Cloudinary
-    const uploadResult = await cloudinary.uploader.upload(
-      `data:${mediaType};base64,${base64Data}`,
-      {
-        folder: 'status_uploads',
-        resource_type: type === 'video' ? 'video' : 'image',
-      }
-    );
+    const uploadResult = await cloudinary.uploader.upload(dataURI, {
+      folder: 'status_uploads',
+      resource_type: type === 'video' ? 'video' : 'image',
+      transformation: [
+        { width: 1080, height: 1080, crop: 'limit' }
+      ]
+    });
 
     console.log("✅ Cloudinary upload successful:", uploadResult.public_id);
 
@@ -86,7 +98,8 @@ router.post("/upload-base64", auth, async (req, res) => {
     res.status(201).json(status);
   } catch (err) {
     console.error("❌ Base64 upload error:", err);
-    res.status(500).json({ error: err.message });
+    console.error("Error details:", err.message);
+    res.status(500).json({ error: err.message || "Upload failed" });
   }
 });
 
