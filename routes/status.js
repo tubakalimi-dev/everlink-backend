@@ -8,10 +8,15 @@ const { cloudinary, storage } = require("../utils/cloudinary");
 const upload = multer({ storage });
 
 // -------------------------
-// Upload Image / Video
+// Upload Image / Video (Mobile - Multipart)
 // -------------------------
 router.post("/upload", auth, upload.single("media"), async (req, res) => {
   try {
+    console.log("📤 Mobile upload request");
+    console.log("User ID:", req.userId);
+    console.log("File:", req.file ? "✅ Present" : "❌ Missing");
+    console.log("Type:", req.body.type);
+
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
@@ -28,9 +33,59 @@ router.post("/upload", auth, upload.single("media"), async (req, res) => {
     // ✅ FIX: Populate userId before sending response
     await status.populate('userId', 'name email profilePicture');
     
+    console.log("✅ Status created:", status._id);
     res.status(201).json(status);
   } catch (err) {
-    console.error("Upload status error:", err);
+    console.error("❌ Upload status error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------
+// Upload Base64 (Web - Base64)
+// -------------------------
+router.post("/upload-base64", auth, async (req, res) => {
+  try {
+    console.log("🌐 Web base64 upload request");
+    console.log("User ID:", req.userId);
+    console.log("Type:", req.body.type);
+    console.log("Has base64Data:", !!req.body.base64Data);
+
+    const { type, base64Data, mediaType } = req.body;
+
+    if (!base64Data) {
+      return res.status(400).json({ error: "No data provided" });
+    }
+
+    // Upload base64 to Cloudinary
+    const uploadResult = await cloudinary.uploader.upload(
+      `data:${mediaType};base64,${base64Data}`,
+      {
+        folder: 'status_uploads',
+        resource_type: type === 'video' ? 'video' : 'image',
+      }
+    );
+
+    console.log("✅ Cloudinary upload successful:", uploadResult.public_id);
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    const status = new Status({
+      userId: req.userId,
+      type: type || 'image',
+      mediaUrl: uploadResult.secure_url,
+      expiresAt
+    });
+
+    await status.save();
+    
+    // ✅ FIX: Populate userId before sending response
+    await status.populate('userId', 'name email profilePicture');
+    
+    console.log("✅ Status created:", status._id);
+    res.status(201).json(status);
+  } catch (err) {
+    console.error("❌ Base64 upload error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -40,6 +95,9 @@ router.post("/upload", auth, upload.single("media"), async (req, res) => {
 // -------------------------
 router.post("/text", auth, async (req, res) => {
   try {
+    console.log("📝 Text status request");
+    console.log("User ID:", req.userId);
+    
     const { textContent, backgroundColor } = req.body;
 
     if (!textContent)
@@ -60,9 +118,10 @@ router.post("/text", auth, async (req, res) => {
     // ✅ FIX: Populate userId before sending response
     await status.populate('userId', 'name email profilePicture');
     
+    console.log("✅ Text status created:", status._id);
     res.status(201).json(status);
   } catch (err) {
-    console.error("Text status error:", err);
+    console.error("❌ Text status error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -72,6 +131,8 @@ router.post("/text", auth, async (req, res) => {
 // -------------------------
 router.get("/all", auth, async (req, res) => {
   try {
+    console.log("📋 Get all statuses request from user:", req.userId);
+    
     const now = new Date();
 
     const statuses = await Status.find({
@@ -79,6 +140,8 @@ router.get("/all", auth, async (req, res) => {
     })
       .populate("userId", "name email profilePicture")
       .sort({ createdAt: -1 });
+
+    console.log(`Found ${statuses.length} active statuses`);
 
     const grouped = {};
     statuses.forEach((s) => {
@@ -123,9 +186,10 @@ router.get("/all", auth, async (req, res) => {
       return 0;
     });
 
+    console.log(`✅ Returning ${result.length} grouped statuses`);
     res.json(result);
   } catch (err) {
-    console.error("Get all statuses error:", err);
+    console.error("❌ Get all statuses error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -135,12 +199,16 @@ router.get("/all", auth, async (req, res) => {
 // -------------------------
 router.get("/my", auth, async (req, res) => {
   try {
+    console.log("📋 Get my statuses request from user:", req.userId);
+    
     const now = new Date();
 
     const statuses = await Status.find({
       userId: req.userId,
       expiresAt: { $gt: now }
     }).sort({ createdAt: -1 });
+
+    console.log(`Found ${statuses.length} own statuses`);
 
     // ✅ FIX: Format response with timeRemaining
     const formattedStatuses = statuses.map(s => ({
@@ -157,7 +225,7 @@ router.get("/my", auth, async (req, res) => {
 
     res.json(formattedStatuses);
   } catch (err) {
-    console.error("Get my statuses error:", err);
+    console.error("❌ Get my statuses error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -167,6 +235,8 @@ router.get("/my", auth, async (req, res) => {
 // -------------------------
 router.post("/:id/view", auth, async (req, res) => {
   try {
+    console.log(`👁️ Mark viewed: ${req.params.id} by ${req.userId}`);
+    
     const status = await Status.findById(req.params.id);
 
     if (!status) return res.status(404).json({ error: "Status not found" });
@@ -180,11 +250,14 @@ router.post("/:id/view", auth, async (req, res) => {
     if (!alreadyViewed) {
       status.viewedBy.push(req.userId);
       await status.save();
+      console.log("✅ Status marked as viewed");
+    } else {
+      console.log("ℹ️ Already viewed");
     }
 
     res.json({ message: "Viewed", viewCount: status.viewedBy.length });
   } catch (err) {
-    console.error("Mark viewed error:", err);
+    console.error("❌ Mark viewed error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -194,6 +267,8 @@ router.post("/:id/view", auth, async (req, res) => {
 // -------------------------
 router.delete("/:id", auth, async (req, res) => {
   try {
+    console.log(`🗑️ Delete status: ${req.params.id} by ${req.userId}`);
+    
     const status = await Status.findById(req.params.id);
 
     if (!status) return res.status(404).json({ error: "Not found" });
@@ -211,17 +286,18 @@ router.delete("/:id", auth, async (req, res) => {
         await cloudinary.uploader.destroy(`status_uploads/${publicId}`, {
           resource_type: status.type === 'video' ? 'video' : 'image'
         });
-        console.log(`Deleted media from Cloudinary: ${publicId}`);
+        console.log(`✅ Deleted media from Cloudinary: ${publicId}`);
       } catch (cloudErr) {
-        console.error("Cloudinary delete error:", cloudErr);
+        console.error("⚠️ Cloudinary delete error:", cloudErr);
         // Continue with database deletion even if cloudinary fails
       }
     }
 
     await Status.findByIdAndDelete(req.params.id);
+    console.log("✅ Status deleted from database");
     res.json({ message: "Status deleted" });
   } catch (err) {
-    console.error("Delete status error:", err);
+    console.error("❌ Delete status error:", err);
     res.status(500).json({ error: err.message });
   }
 });
