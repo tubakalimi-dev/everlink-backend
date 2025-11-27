@@ -194,13 +194,6 @@ app.use((err, req, res, next) => {
     message: err.message || 'Internal server error'
   });
 });
-app.post('/api/test-auth', auth, (req, res) => {
-  res.json({
-    message: 'Auth working!',
-    userId: req.userId,
-    timestamp: new Date()
-  });
-});
 // Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
